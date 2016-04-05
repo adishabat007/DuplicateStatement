@@ -307,9 +307,41 @@ function FlowInsensitiveSlice(S: Statement, V: set<Variable>): Statement
 	else Assignment(["i","prod"],["i+1","prod*i"])
 }
 
+function method GetAssignmentsOfV(LHS : seq<Variable>, RHS : seq<Expression>, V: set<Variable>) : Statement
+
+{
+	if LHS == [] then Skip
+	else if LHS[0] in V then SeqComp(Assignment([LHS[0]],[RHS[0]]), GetAssignmentsOfV(LHS[1..], RHS[1..], V))
+	else GetAssignmentsOfV(LHS[1..], RHS[1..], V)
+}
+
+function method ComputeSlides(S: Statement, V: set<Variable>) : Statement
+
+{
+	if V * def(S) == {} then Skip
+	else
+	match S {
+		case Skip => Skip
+		case Assignment(LHS,RHS) => GetAssignmentsOfV(LHS,RHS,V)
+		case SeqComp(S1,S2) => SeqComp(ComputeSlides(S1,V), ComputeSlides(S2,V))
+		case IF(B0,Sthen,Selse) => IF(B0, ComputeSlides(Sthen,V) , ComputeSlides(Selse,V))
+		case DO(B,S) => DO(B, ComputeSlides(S,V))
+	}
+}
+
+function method ComputeSlidesDepRtc(S: Statement, V: set<Variable>) : set<Variable>
+
+{
+	var slidesSV := ComputeSlides(S, V);
+	var U := glob(slidesSV) * def(S);
+
+	if U <= V then V else ComputeSlidesDepRtc(S, V + U)
+}
+
 method ComputeFISlice(S: Statement, V: set<Variable>) returns (SV: Statement)
 	ensures SV == FlowInsensitiveSlice(S,V)
 {
-	// TODO: implement...
-	 
+	var Vstar := ComputeSlidesDepRtc(S, V);
+
+	SV := ComputeSlides(S, Vstar);
 }
