@@ -311,8 +311,16 @@ function method GetAssignmentsOfV(LHS : seq<Variable>, RHS : seq<Expression>, V:
 
 {
 	if LHS == [] then Skip
-	else if LHS[0] in V then SeqComp(Assignment([LHS[0]],[RHS[0]]), GetAssignmentsOfV(LHS[1..], RHS[1..], V))
+	else if LHS[0] in V then 
+	var tempRes := GetAssignmentsOfV(LHS[1..], RHS[1..], V);
+	match tempRes {
+		case Assignment(LHS1,RHS1) => Assignment([LHS[0]]+LHS1, [RHS[0]]+RHS1)
+	}
 	else GetAssignmentsOfV(LHS[1..], RHS[1..], V)
+
+	/*if LHS == [] then Skip
+	else if LHS[0] in V then SeqComp(Assignment([LHS[0]],[RHS[0]]), GetAssignmentsOfV(LHS[1..], RHS[1..], V))
+	else GetAssignmentsOfV(LHS[1..], RHS[1..], V)*/
 }
 
 function method ComputeSlides(S: Statement, V: set<Variable>) : Statement
