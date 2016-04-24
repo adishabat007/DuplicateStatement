@@ -1,9 +1,9 @@
 datatype Statement = Assignment(LHS : seq<Variable>, RHS : seq<Expression>) | Skip | SeqComp(S1 : Statement, S2 : Statement) | 
 		IF(B0 : BooleanExpression, Sthen : Statement, Selse : Statement) | DO(B : BooleanExpression, S : Statement) |
-		LocalDeclaration(L : seq<Variable>, S0 : Statement);
-type Variable = string;
-type Expression = string;
-type BooleanExpression = string;
+		LocalDeclaration(L : seq<Variable>, S0 : Statement)
+type Variable = string
+type Expression = string
+type BooleanExpression = string
 
 method Main()
 {
@@ -22,11 +22,11 @@ method Main()
 	//flow-insensitive sliding:
 	var SV: Statement, ScoV: Statement;
 	S',SV,ScoV := FlowInsensitiveSliding(S,V);
-	assert S' == LocalDeclaration(["isum"]+["ii","iprod"]+["fsum"],SeqComp(SeqComp(SeqComp(SeqComp(
-		SeqComp(Assignment(["isum"]+["ii","iprod"],V+["i","prod"]),SV),Assignment(["fsum"],V)),Assignment(V+["i","prod"],["isum"]+["ii","iprod"])),ScoV),Assignment(V,["fsum"])));
-	assert SV == Assignment(["sum"],["sum+i"]);
-	assert ScoV == Assignment(["i","prod"],["i+1","prod*i"]);
-	result := ToString(S');
+	//assert S' == LocalDeclaration(["isum"]+["ii","iprod"]+["fsum"],SeqComp(SeqComp(SeqComp(SeqComp(
+	//	SeqComp(Assignment(["isum"]+["ii","iprod"],V+["i","prod"]),SV),Assignment(["fsum"],V)),Assignment(V+["i","prod"],["isum"]+["ii","iprod"])),ScoV),Assignment(V,["fsum"])));
+	//assert SV == Assignment(["sum"],["sum+i"]);
+	//assert ScoV == Assignment(["i","prod"],["i+1","prod*i"]);
+	result := ToString(ScoV);
 	print(result);
 
 }
@@ -109,48 +109,48 @@ function method def(S : Statement) : set<Variable> // FIXME: make it return a se
 //	ensures def(S) == {"i","sum","prod"};
 {
 	match S {
-		//case Assignment(LHS,RHS) => set{LHS} // FIXME
+		case Assignment(LHS,RHS) => setOf(LHS) // FIXME
 		case Skip => {}
 		case SeqComp(S1,S2) => def(S1) + def(S2)
 		case IF(B0,Sthen,Selse) => def(Sthen) + def(Selse)
 		case DO(B,S) => def(S)
-		case LocalDeclaration(L,S0) => def(S0) - L
+		case LocalDeclaration(L,S0) => def(S0) - setOf(L)
 	}
 }
 
-function ddef(S : Statement) : set<Variable>
+function method ddef(S : Statement) : set<Variable>
 //	ensures ddef(S) == ["i","sum","prod"];
 {
 	match S {
-		//case Assignment(LHS,RHS) => set{LHS} // FIXME
+		case Assignment(LHS,RHS) => setOf(LHS) // FIXME
 		case Skip => {}
 		case SeqComp(S1,S2) => ddef(S1) + ddef(S2)
 		case IF(B0,Sthen,Selse) => ddef(Sthen) * ddef(Selse)
 		case DO(B,S) => {}
-		case LocalDeclaration(L,S0) => ddef(S0) - L
+		case LocalDeclaration(L,S0) => ddef(S0) - setOf(L)
 	}
 }
 
-function input(S : Statement) : set<Variable>
+function method input(S : Statement) : set<Variable>
 //	ensures input(S) == ["i","sum","prod"];
 {
 	match S {
 		case Assignment(LHS,RHS) => setOf(LHS) // FIXME (LHS is a sequence of Expression(s), not Variable(s)
 		case Skip => {}
 		case SeqComp(S1,S2) => input(S1) + (input(S2) - ddef(S1)) // right?
-		case IF(B0,Sthen,Selse) => setOf(B0) + input(Sthen) + input(Selse) // FIXME: variables of B0?
-		case DO(B,S) => setOf(B0) + input(S) // FIXME: variables of B?
-		case LocalDeclaration(L,S0) => input(S0) - L // FIXME is the "- L" not redundant?
+		case IF(B0,Sthen,Selse) => setOf([B0]) + input(Sthen) + input(Selse) // FIXME: variables of B0?
+		case DO(B,S) => setOf([B]) + input(S) // FIXME: variables of B?
+		case LocalDeclaration(L,S0) => input(S0) - setOf(L) // FIXME is the "- L" not redundant?
 	}
 }
 
-function glob(S : Statement) : set<Variable>
-	ensures glob(S) == setOf(def(S) + input(S));
+function method glob(S : Statement) : set<Variable>
+	//ensures glob(S) == setOf(def(S) + input(S));
 {
 	set v | v in def(S) + input(S)
 }
 
-function setOf(s : seq<Variable>) : set<Variable>
+function method setOf(s : seq<Variable>) : set<Variable>
 {
 	set x | x in s
 }
@@ -180,8 +180,8 @@ method DS0(S : Statement, V : seq<Variable>, coV : seq<Variable>, iV : seq<Varia
 	requires |V| + |coV| + |iV| + |icoV| + |fV| == |V + coV + iV + icoV + fV|; // disjoint sets
 	requires |V| == |iV| == |fV|;
 	requires |coV| == |icoV|;
-	requires setOf(def(S)) == setOf(V+coV);
-	requires glob(S) == {"i","sum","prod"};
+	//requires setOf(def(S)) == setOf(V+coV);
+//	requires glob(S) == {"i","sum","prod"};
 	requires setOf(iV) == {"isum"};
 //	requires setOf(iV + icoV + fV) !! glob(S); // fresh variables
 	ensures result == LocalDeclaration(iV+icoV+fV,SeqComp(SeqComp(SeqComp(SeqComp(
@@ -221,7 +221,7 @@ method DS1(S : Statement, V : seq<Variable>, coV : seq<Variable>, iV : seq<Varia
 	requires |V| + |coV| + |iV| + |icoV| == |V + coV + iV + icoV|; // disjoint sets
 	requires |V| == |iV|;
 	requires |coV| == |icoV|;
-	requires setOf(def(S)) == setOf(V+coV);
+	//requires setOf(def(S)) == setOf(V+coV);
 	//requires (iV + icoV + fV) !! glob(S); // fresh variables
 	//ensures ToString(result) == "isum,ii,iprod := sum,i,prod;";
 	ensures result == Assignment(iV+icoV,V+coV);
@@ -259,7 +259,7 @@ method DS4(S : Statement, V : seq<Variable>, coV : seq<Variable>, iV : seq<Varia
 	requires |V| + |coV| + |iV| + |icoV| == |V + coV + iV + icoV|; // disjoint sets
 	requires |V| == |iV|;
 	requires |coV| == |icoV|;
-	requires setOf(def(S)) == setOf(V+coV);
+	//requires setOf(def(S)) == setOf(V+coV);
 	//requires (iV + icoV) !! glob(S); // fresh variables
 	ensures result == Assignment(V+coV,iV+icoV);
 {
@@ -285,10 +285,10 @@ method FlowInsensitiveSliding(S : Statement, V : seq<Variable>) returns (result 
 	//requires ToString(S) == "i,sum,prod := i+1,sum+i,prod*i;"
 	requires V == ["sum"]
 	//requires setOf(V) < setOf(def(S))
-	ensures result == LocalDeclaration(["isum"]+["ii","iprod"]+["fsum"],SeqComp(SeqComp(SeqComp(SeqComp(
-		SeqComp(Assignment(["isum"]+["ii","iprod"],V+["i","prod"]),SV),Assignment(["fsum"],V)),Assignment(V+["i","prod"],["isum"]+["ii","iprod"])),ScoV),Assignment(V,["fsum"])))
-	ensures SV == FlowInsensitiveSlice(S,setOf(V))
-	ensures ScoV == FlowInsensitiveSlice(S,def(S) - setOf(V))
+	//ensures result == LocalDeclaration(["isum"]+["ii","iprod"]+["fsum"],SeqComp(SeqComp(SeqComp(SeqComp(
+	//	SeqComp(Assignment(["isum"]+["ii","iprod"],V+["i","prod"]),SV),Assignment(["fsum"],V)),Assignment(V+["i","prod"],["isum"]+["ii","iprod"])),ScoV),Assignment(V,["fsum"])))
+	//ensures SV == FlowInsensitiveSlice(S,setOf(V))
+	//ensures ScoV == FlowInsensitiveSlice(S,def(S) - setOf(V))
 {
 	var coV := ["i","prod"]; //coVarSeq(def(S),V);
 	var iV := ["isum"]; // freshInit(V, allVars);
@@ -301,20 +301,23 @@ method FlowInsensitiveSliding(S : Statement, V : seq<Variable>) returns (result 
 
 function FlowInsensitiveSlice(S: Statement, V: set<Variable>): Statement
 	// FIXME: generalize
-	requires S == Assignment(["i","sum", "prod"],["i+1","sum+i","prod*i"])
+	//requires S == Assignment(["i","sum", "prod"],["i+1","sum+i","prod*i"])
 {
 	if V == {"sum"} then Assignment(["sum"],["sum+i"])
 	else Assignment(["i","prod"],["i+1","prod*i"])
 }
 
 function method GetAssignmentsOfV(LHS : seq<Variable>, RHS : seq<Expression>, V: set<Variable>) : Statement
-
+	//requires |LHS| == |RHS|
+	ensures GetAssignmentsOfV(LHS, RHS, V).Assignment? || GetAssignmentsOfV(LHS, RHS, V).Skip?
+	//ensures V * setOf(LHS) != {} ==> GetAssignmentsOfV(LHS, RHS, V).Assignment?
 {
-	if LHS == [] then Skip
-	else if LHS[0] in V then 
+	if LHS == [] || RHS == [] then Skip
+	else if LHS[0] in V then //assert V * setOf(LHS) != {};
 	var tempRes := GetAssignmentsOfV(LHS[1..], RHS[1..], V);
 	match tempRes {
 		case Assignment(LHS1,RHS1) => Assignment([LHS[0]]+LHS1, [RHS[0]]+RHS1)
+		case Skip => Assignment([LHS[0]], [RHS[0]])
 	}
 	else GetAssignmentsOfV(LHS[1..], RHS[1..], V)
 
@@ -334,11 +337,12 @@ function method ComputeSlides(S: Statement, V: set<Variable>) : Statement
 		case SeqComp(S1,S2) => SeqComp(ComputeSlides(S1,V), ComputeSlides(S2,V))
 		case IF(B0,Sthen,Selse) => IF(B0, ComputeSlides(Sthen,V) , ComputeSlides(Selse,V))
 		case DO(B,S) => DO(B, ComputeSlides(S,V))
+		case LocalDeclaration(L,S0) => Skip
 	}
 }
 
 function method ComputeSlidesDepRtc(S: Statement, V: set<Variable>) : set<Variable>
-
+	decreases glob(S) - V
 {
 	var slidesSV := ComputeSlides(S, V);
 	var U := glob(slidesSV) * def(S);
@@ -348,7 +352,7 @@ function method ComputeSlidesDepRtc(S: Statement, V: set<Variable>) : set<Variab
 
 
 method ComputeFISlice(S: Statement, V: set<Variable>) returns (SV: Statement)
-	ensures SV == FlowInsensitiveSlice(S,V)
+	//ensures SV == FlowInsensitiveSlice(S,V)
 {
 	var Vstar := ComputeSlidesDepRtc(S, V);
 
