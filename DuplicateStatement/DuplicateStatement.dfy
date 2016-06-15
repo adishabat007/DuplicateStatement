@@ -371,8 +371,26 @@ function method ToSSA(S: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable
 
 function method AssignmentToSSA(LHS: seq<Variable>, RHS: seq<Variable>, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
 {
-	var XL2XL6 := freshInit([LHS[0], LHS[2]], setOf(X)+Y+XLs);
-	var LHS' := [liveOnExitX[1], XL2XL6[0], liveOnExitX[2], XL2XL6[1], LHS[4]];
+	var copyLHS := setOf(LHS);
+	var X4 := copyLHS * setOf(liveOnEntryX) * setOf(liveOnExitX);
+	
+	var copyLHS := copyLHS - X4;
+	var X5 := copyLHS * setOf(liveOnExitX);
+
+	var copyLHS := copyLHS - X5;
+	var X2 := copyLHS * setOf(liveOnEntryX);
+
+	var copyLHS := copyLHS - X2;
+	var Y1 := copyLHS * Y;
+
+	var copyLHS := copyLHS - Y;
+	var X6 := copyLHS;
+
+	var XL4f := X4;
+	var XL5f := X5;
+
+	var XL2XL6 := freshInit([X2, X6], setOf(X)+Y+XLs);
+	var LHS' := [XL4f, XL2XL6[0], XL5f, XL2XL6[1], Y1];
 
 	var RHS' := []; // TODO 
 
@@ -381,13 +399,21 @@ function method AssignmentToSSA(LHS: seq<Variable>, RHS: seq<Variable>, X: seq<V
 
 function method SeqCompToSSA(S1: Statement, S2: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
 {
-	var X6 := (setOf(X) - {X[2]}) * (({X[3], X[4]} - ddef(S2)) + input(S2)); // set
-	var X11 := {X[0]} * X6; // set
-	var X21 := ({X[1]} * X6) - def(S1); // set
-	var X41 := ({X[3]} * X6) - def(S1); // set
-	var X42 := ({X[3]} * X6) - def(S2); // set
-	var X51 := ({X[4]} * X6) - def(S2); // set
-	var X61 := X6 - (X11+X21+X41+X42+X51); // set
+	var X3X4 := setOf(liveOnEntryX) * setOf(liveOnExitX);
+	var X4 := X3X4 * (def(S1) + def(S2));
+	var X3 := X3X4 - X4;
+	var X5 := setOf(liveOnExitX) - X3X4;
+	var X1X2 := setOf(liveOnEntryX) - X3X4;
+	var X2:= X1X2 * (def(S1) + def(S2));
+	var X1 := X1X2 - X2;
+
+	var X6 := (setOf(X) - X3) * (((X4 + X5) - ddef(S2)) + input(S2)); 
+	var X11 := X1 * X6; 
+	var X21 := (X2 * X6) - def(S1); 
+	var X41 := (X4 * X6) - def(S1); 
+	var X42 := (X4 * X6) - def(S2); 
+	var X51 := (X5 * X6) - def(S2);
+	var X61 := X6 - (X11+X21+X41+X42+X51); 
 
 	var XL61 := freshInit(X61, setOf(X) + Y + XLs); // seq  // TODO 
 	var XL6 := []; // TODO 
