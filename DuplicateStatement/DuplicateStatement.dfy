@@ -5,6 +5,29 @@ type Variable = string
 type Expression = string
 type BooleanExpression = string
 
+class VariablesSSA {
+
+	var m: map<Variable, seq<Variable>>;
+
+	method variablesToSSAVariables(variables: seq<Variable>, instances: seq<Variable>)
+	{
+		if !(variables == []) { addVariable(variables[0], instances[0]); variablesToSSAVariables(variables[1..], instances[1..]); }
+	}
+
+	method addVariable(v: Variable, vSSA: Variable)
+	{
+		if v in m { m := m[v := m[v] + [vSSA]]; } else { m := m[v := [vSSA]]; }
+	}
+
+	function method getVariableInRegularForm(vSSA: Variable)  : Variable
+	{
+		var v :| v in m;
+		var values := m[v];
+
+		if vSSA in values then v else getVariableInRegularForm(vSSA, m - v)
+	}
+}
+
 method Main()
 {
 	var S : Statement;
@@ -359,45 +382,59 @@ method ComputeFISlice(S: Statement, V: set<Variable>) returns (SV: Statement)
 	SV := ComputeSlides(S, Vstar);
 }
 
-function method ToSSA(S: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
+ method ToSSA(S: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) returns(S': Statement)
 {
+	var vsSSA := new VariablesSSA;
+
 	match S {
-		case Assignment(LHS,RHS) => AssignmentToSSA(LHS, RHS, X, liveOnEntryX, liveOnExitX, Y, XLs)
-		case SeqComp(S1,S2) => SeqCompToSSA(S1, S2, X, liveOnEntryX, liveOnExitX, Y, XLs)
-		case IF(B0,Sthen,Selse) => IfToSSA(B0, Sthen, Selse, X, liveOnEntryX, liveOnExitX, Y, XLs)
-		case DO(B,S) => DoToSSA(B, S, X, liveOnEntryX, liveOnExitX, Y, XLs)
+		case Assignment(LHS,RHS) => S' := AssignmentToSSA(LHS, RHS, X, liveOnEntryX, liveOnExitX, Y, XLs, vsSSA);
+		case SeqComp(S1,S2) => S' := SeqCompToSSA(S1, S2, X, liveOnEntryX, liveOnExitX, Y, XLs, vsSSA);
+		case IF(B0,Sthen,Selse) => S' := IfToSSA(B0, Sthen, Selse, X, liveOnEntryX, liveOnExitX, Y, XLs, vsSSA);
+		case DO(B,S) => S' := DoToSSA(B, S, X, liveOnEntryX, liveOnExitX, Y, XLs, vsSSA);
 	}
 }
 
-function method AssignmentToSSA(LHS: seq<Variable>, RHS: seq<Variable>, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
+method AssignmentToSSA(LHS: seq<Variable>, RHS: seq<Variable>, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>, vsSSA: VariablesSSA) returns (S': Statement)
 {
 	var copyLHS := setOf(LHS);
 	var X4 := copyLHS * setOf(liveOnEntryX) * setOf(liveOnExitX);
 	
-	var copyLHS := copyLHS - X4;
+	copyLHS := copyLHS - X4;
 	var X5 := copyLHS * setOf(liveOnExitX);
 
-	var copyLHS := copyLHS - X5;
+	copyLHS := copyLHS - X5;
 	var X2 := copyLHS * setOf(liveOnEntryX);
 
-	var copyLHS := copyLHS - X2;
+	copyLHS := copyLHS - X2;
 	var Y1 := copyLHS * Y;
 
-	var copyLHS := copyLHS - Y;
+	copyLHS := copyLHS - Y;
 	var X6 := copyLHS;
 
 	var XL4f := X4;
 	var XL5f := X5;
 
-	var XL2XL6 := freshInit([X2, X6], setOf(X)+Y+XLs);
-	var LHS' := [XL4f, XL2XL6[0], XL5f, XL2XL6[1], Y1];
+	//var XL2XL6 := freshInit([X2, X6], setOf(X)+Y+XLs);
 
+	var X2X6Seq := setToSeq(X2) + setToSeq(X6);
+	var XL2XL6 := freshInit(X2X6Seq, setOf(X)+Y+XLs);
+		
+		vsSSA.variablesToSSAVariables(X2X6Seq, XL2XL6);
+
+	var LHS' := [XL4f, XL2XL6[..|X2|], XL5f, XL2XL6[|X2|..], Y1];
 	var RHS' := []; // TODO 
 
-	Assignment(LHS', RHS') 
+	S' := Assignment(LHS', RHS') ;
 }
 
-function method SeqCompToSSA(S1: Statement, S2: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
+function method setToSeq(s : set<Variable>) : seq<Variable>
+{
+	var v :| v in s;
+
+	if s == {} then [] else [v] + setToSeq(s - {v})
+}
+
+method SeqCompToSSA(S1: Statement, S2: Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>, vsSSA: VariablesSSA) returns (S': Statement)
 {
 	var X3X4 := setOf(liveOnEntryX) * setOf(liveOnExitX);
 	var X4 := X3X4 * (def(S1) + def(S2));
@@ -415,7 +452,12 @@ function method SeqCompToSSA(S1: Statement, S2: Statement, X: seq<Variable>, liv
 	var X51 := (X5 * X6) - def(S2);
 	var X61 := X6 - (X11+X21+X41+X42+X51); 
 
-	var XL61 := freshInit(X61, setOf(X) + Y + XLs); // seq  // TODO 
+	//var XL61 := freshInit(X61, setOf(X) + Y + XLs); // seq  // TODO 
+	var X61Seq := setToSeq(X61);
+	var XL61 := freshInit(X61Seq, setOf(X) + Y + XLs);
+		
+		vsSSA.variablesToSSAVariables(X61Seq, XL61);
+
 	var XL6 := []; // TODO 
 
 	var XLs' := XLs + setOf(XL61);
@@ -423,17 +465,20 @@ function method SeqCompToSSA(S1: Statement, S2: Statement, X: seq<Variable>, liv
 	var XLs'' := XLs' + (glob(S1') - Y);
 	var S2' := ToSSA(S2, X, XL6, liveOnExitX, Y, XLs'');
 
-	SeqComp(S1, S2)
+	S' := SeqComp(S1', S2');
 }
 
-function method IfToSSA(B : BooleanExpression, S1 : Statement, S2 : Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
+method IfToSSA(B : BooleanExpression, S1 : Statement, S2 : Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>, vsSSA: VariablesSSA) returns (S': Statement)
 {
+	var X4 := {};
+	var X5 := {};
+
 	var B' := B; // TODO
 	
-	var X4d1 := {X[3]} * (def(S1) - def(S2)); // set
-	var X4d2 := {X[3]} * (def(S2) - def(S1)); // set
-	var X4d1d2 := {X[3]} * def(S1) * def(S2); // set
-	var freshRes := freshInit([X4d1, X4d2, X4d1d2, X4d1d2, X[4], X[4]], setOf(X) + Y + XLs); // seq
+	var X4d1 := X4 * (def(S1) - def(S2)); // set
+	var X4d2 := X4 * (def(S2) - def(S1)); // set
+	var X4d1d2 := X4 * def(S1) * def(S2); // set
+	var freshRes := freshInit([X4d1, X4d2, X4d1d2, X4d1d2, X5, X5], setOf(X) + Y + XLs); // seq
 
 	var XL4t := []; // TODO 
 	var XL4e := []; // TODO 
@@ -444,18 +489,23 @@ function method IfToSSA(B : BooleanExpression, S1 : Statement, S2 : Statement, X
 	var S2' := ToSSA(S2, X, liveOnEntryX, [liveOnExitX[0], XL4e, freshRes[5]], Y, XLs'');
 	
 
-	IF(B', SeqComp(S1', Assignment([liveOnExitX[1], liveOnExitX[2]], [XL4t, freshRes[4]])), SeqComp(S2', Assignment([liveOnExitX[1], liveOnExitX[2]], [XL4e, freshRes[5]])))
+	S' := IF(B', SeqComp(S1', Assignment([X4, X5], [XL4t, freshRes[4]])), SeqComp(S2', Assignment([X4, X5], [XL4e, freshRes[5]])));
 }
 
-function method DoToSSA(B : BooleanExpression, S : Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>) : Statement
+method DoToSSA(B : BooleanExpression, S : Statement, X: seq<Variable>, liveOnEntryX: seq<Variable>, liveOnExitX: seq<Variable>, Y: set<Variable>, XLs: set<Variable>, vsSSA: VariablesSSA) returns (S'': Statement)
 {
-	var freshRes := freshInit([X[1], X[1], X[3]], setOf(X) + Y + XLs);
+	var X4 := {};
+	var X3 := {};
+	var X2 := {};
+	var X1 := {};
+
+	var freshRes := freshInit([X2, X2, X4], setOf(X) + Y + XLs);
 	var XLs' := XLs + setOf([freshRes[0],freshRes[1],freshRes[2]]);
 
 	var B' := B; // TODO 
 	
-	var S' := ToSSA(S, X, [liveOnEntryX[0], freshRes[0], liveOnEntryX[2], liveOnExitX[1]], [liveOnEntryX[0], freshRes[1], liveOnEntryX[2], freshRes[2]],Y, XLs');
-	var DO' := SeqComp(DO(B', S'), Assignment([freshRes[0], liveOnExitX[1]], [freshRes[1], freshRes[2]]));
+	var S' := ToSSA(S, X, [X1, freshRes[0], X3, liveOnExitX[1]], [X1, freshRes[1], X3, freshRes[2]], Y, XLs');
+	var DO' := SeqComp(DO(B', S'), Assignment([freshRes[0], X4], [freshRes[1], freshRes[2]]));
 
-	SeqComp(Assignment([freshRes[0], liveOnExitX[1]], [liveOnEntryX[1], liveOnEntryX[3]]), DO')
+	S'' := SeqComp(Assignment([freshRes[0], X4], [X2, X4]), DO');
 }
